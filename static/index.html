@@ -1,0 +1,1178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>STEP Assembly Editor</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'Segoe UI',system-ui,sans-serif; background:#1a1a2e; color:#e0e0e0; height:100vh; overflow:hidden; }
+
+/* ── Layout ─────────────────────────────────────────────── */
+#app { display:grid; grid-template-rows:48px 1fr; grid-template-columns:340px 1fr; height:100vh; }
+#toolbar { grid-column:1/-1; background:#16213e; border-bottom:1px solid #0f3460; display:flex; align-items:center; padding:0 14px; gap:9px; }
+#sidebar { overflow:hidden; display:flex; flex-direction:column; background:#1a1a2e; border-right:1px solid #0f3460; }
+#viewer  { position:relative; overflow:hidden; background:#0a0a16; }
+
+/* ── Toolbar ─────────────────────────────────────────────── */
+#toolbar h1 { font-size:14px; font-weight:700; color:#e94560; margin-right:auto; white-space:nowrap; letter-spacing:.3px; }
+.tb-btn { background:#0f3460; border:1px solid #533483; color:#e0e0e0; padding:5px 13px; border-radius:4px; cursor:pointer; font-size:12px; white-space:nowrap; }
+.tb-btn:hover:not(:disabled) { background:#533483; }
+.tb-btn:disabled { opacity:.4; cursor:default; }
+.tb-btn.primary { background:#e94560; border-color:#e94560; }
+.tb-btn.primary:hover:not(:disabled) { background:#c73e54; }
+#fileInput { display:none; }
+#filename { font-size:11px; color:#8888aa; max-width:190px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#statusBar { font-size:11px; color:#6688aa; white-space:nowrap; max-width:260px; overflow:hidden; text-overflow:ellipsis; }
+.api-pill { font-size:11px; padding:3px 9px; border-radius:10px; white-space:nowrap; flex-shrink:0; }
+.api-pill.on  { background:#0d2b1a; color:#57cc99; border:1px solid #1d5a2a; }
+.api-pill.off { background:#2a1212; color:#cc7766; border:1px solid #5a2222; }
+.api-pill.busy{ background:#1a1a0d; color:#ccaa44; border:1px solid #5a4a0a; }
+.match-pill { display:none; font-size:11px; padding:3px 9px; border-radius:10px; white-space:nowrap; flex-shrink:0; background:#082419; color:#39e58c; border:1px solid #17633f; }
+.match-pill.show { display:inline-block; }
+
+/* ── Sidebar tabs ────────────────────────────────────────── */
+.tab-bar { display:flex; border-bottom:1px solid #0f3460; flex-shrink:0; }
+.tab-btn { flex:1; padding:8px; text-align:center; font-size:12px; cursor:pointer; border:none; background:transparent; color:#888; }
+.tab-btn.active { color:#e94560; border-bottom:2px solid #e94560; }
+.tab-content { display:none; flex:1; overflow-y:auto; min-height:0; }
+.tab-content.active { display:block; }
+
+/* ── Add-group bar ───────────────────────────────────────── */
+#addGroupBar { display:none; padding:5px 8px; gap:4px; flex-shrink:0; border-bottom:1px solid #0f3460; }
+#addGroupBar.show { display:flex; }
+#addGroupBar input { flex:1; background:#0f1a2e; border:1px solid #333; color:#e0e0e0; padding:4px 8px; border-radius:4px; font-size:12px; }
+#addGroupBar input:focus { outline:none; border-color:#533483; }
+
+/* ── Group tree ──────────────────────────────────────────── */
+.tree-group { margin:2px 0; }
+.group-header { display:flex; align-items:center; padding:5px 8px 5px 10px; cursor:pointer; border-radius:4px; margin:0 5px; gap:5px; user-select:none; }
+.group-header:hover, .group-header.hovered { background:#16213e; }
+.group-header.drag-over { background:#0f3460; outline:2px solid #533483; }
+.g-dot  { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
+.g-caret{ width:13px; font-size:10px; color:#666; flex-shrink:0; transition:transform .12s; }
+.g-caret.open { transform:rotate(90deg); }
+.g-name { font-weight:600; font-size:12.5px; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.g-name input { background:transparent; border:none; border-bottom:1px solid #533483; color:#e0e0e0; font:inherit; width:100%; outline:none; }
+.g-count { font-size:11px; color:#555; flex-shrink:0; }
+.g-actions { display:none; gap:1px; flex-shrink:0; }
+.group-header:hover .g-actions { display:flex; }
+.act-btn { background:none; border:none; color:#777; cursor:pointer; font-size:12px; padding:2px 4px; border-radius:3px; }
+.act-btn:hover { background:#2a2a3a; color:#e94560; }
+.group-children { padding-left:18px; overflow:hidden; }
+.group-children.collapsed { display:none; }
+
+/* ── Pose panel ──────────────────────────────────────────── */
+#poseList { padding:8px 10px; font-size:12px; font-family:'SF Mono','Consolas',monospace; }
+.pose-empty { color:#667; padding:12px 4px; font-style:italic; font-family:'Segoe UI',system-ui,sans-serif; }
+.pose-ref { background:#162033; border:1px solid #0f3460; border-radius:5px; padding:7px 9px; margin-bottom:10px; }
+.pose-ref-title { font-size:11px; color:#e94560; font-weight:700; margin-bottom:4px; letter-spacing:.3px; text-transform:uppercase; font-family:'Segoe UI',system-ui,sans-serif; }
+.pose-row { background:#121a2a; border:1px solid #243052; border-radius:5px; padding:6px 9px; margin-bottom:6px; }
+.pose-row:hover { border-color:#533483; }
+.pose-head { font-size:12px; margin-bottom:3px; color:#39e58c; font-family:'Segoe UI',system-ui,sans-serif; }
+.pose-sub  { color:#88a; font-weight:normal; margin-left:6px; }
+.pose-line { display:flex; gap:8px; font-size:11.5px; color:#bcd; padding:1px 0; }
+.pose-key  { color:#8aa; min-width:52px; }
+.pose-val  { color:#dde; }
+
+/* ── Component nodes ─────────────────────────────────────── */
+.comp-node { display:flex; align-items:center; padding:3px 6px 3px 10px; margin:0 5px; border-radius:4px; cursor:pointer; gap:5px; font-size:12px; user-select:none; border-left:2px solid transparent; }
+.comp-node:hover { background:#16213e; }
+.comp-node.dragging { opacity:.3; }
+.comp-node.selected { background:#162030; border-left-color:#e94560; }
+.comp-node.matched { background:#10251d; border-left-color:#39e58c; }
+.comp-node.matched.selected { background:#26301a; border-left-color:#ffe060; }
+.comp-node .c-name  { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.comp-node .c-eng   { color:#5a9; font-size:11px; flex-shrink:0; max-width:130px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.comp-node .c-count { color:#666; font-size:11px; flex-shrink:0; }
+.comp-node .c-match { color:#39e58c; font-size:11px; flex-shrink:0; }
+.comp-node .c-del   { display:none; background:none; border:none; color:#666; cursor:pointer; font-size:11px; padding:0 2px; flex-shrink:0; }
+.comp-node:hover .c-del { display:block; }
+.comp-node .c-del:hover { color:#e94560; }
+
+/* ── Original tree ───────────────────────────────────────── */
+.orig-node { padding:2px 0 2px 10px; font-size:12px; }
+.orig-toggle { cursor:pointer; user-select:none; color:#666; margin-right:3px; }
+.orig-name  { color:#ccc; }
+.orig-node.matched > .orig-name { color:#39e58c; font-weight:600; }
+.orig-eng   { color:#5a9; font-size:11px; margin-left:5px; }
+.orig-count { color:#555; font-size:11px; margin-left:3px; }
+.orig-match { color:#39e58c; font-size:11px; margin-left:4px; }
+.orig-children { padding-left:14px; }
+.orig-children.collapsed { display:none; }
+
+/* ── 3-D viewer ──────────────────────────────────────────── */
+#three-canvas { position:absolute; inset:0; width:100%!important; height:100%!important; display:block; }
+#viewer-hint { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none; z-index:2; }
+.hint-card { background:rgba(22,33,62,.9); border:1px solid #0f3460; border-radius:10px; padding:28px 32px; max-width:300px; text-align:center; pointer-events:auto; }
+.hint-card h2 { color:#e94560; font-size:15px; margin-bottom:10px; }
+.hint-card p  { color:#888; font-size:12.5px; line-height:1.65; margin-bottom:10px; }
+.hint-step    { font-size:12px; color:#aaa; text-align:left; margin:5px 0; }
+.hint-step b  { color:#e94560; }
+
+/* ── Tooltip ─────────────────────────────────────────────── */
+#tooltip { position:absolute; background:#16213e; border:1px solid #2a3a5a; border-radius:7px; padding:8px 12px; font-size:12px; pointer-events:none; z-index:30; max-width:230px; display:none; box-shadow:0 4px 16px rgba(0,0,0,.5); }
+#tooltip .tt-name  { font-weight:600; word-break:break-all; }
+#tooltip .tt-eng   { color:#5a9; margin-top:3px; }
+#tooltip .tt-group { color:#666; font-size:11px; margin-top:2px; }
+#tooltip .tt-count { color:#888; font-size:11px; margin-top:1px; }
+#tooltip .tt-match { color:#39e58c; font-size:11px; margin-top:2px; }
+
+/* ── Viewer controls ─────────────────────────────────────── */
+#viewer-btns { position:absolute; top:10px; right:10px; display:flex; flex-direction:column; gap:4px; z-index:10; }
+#viewer-btns button { background:rgba(22,33,62,.85); border:1px solid #2a3a5a; color:#aaa; width:28px; height:28px; border-radius:5px; cursor:pointer; font-size:13px; display:flex; align-items:center; justify-content:center; }
+#viewer-btns button:hover { background:#0f3460; color:#e0e0e0; }
+#viewer-btns button.active { background:#0f3460; color:#39e58c; border-color:#39e58c; }
+#view-label { position:absolute; bottom:10px; left:10px; font-size:11px; color:#444; z-index:10; user-select:none; }
+
+/* ── Loading overlay ─────────────────────────────────────── */
+#overlay { position:absolute; inset:0; background:rgba(8,8,18,.88); display:flex; align-items:center; justify-content:center; z-index:50; transition:opacity .2s; }
+#overlay.hidden { display:none; }
+.ov-box { text-align:center; }
+.spinner { width:34px; height:34px; border:3px solid #1a2a3a; border-top-color:#e94560; border-radius:50%; animation:spin .75s linear infinite; margin:0 auto 12px; }
+@keyframes spin { to { transform:rotate(360deg); } }
+.ov-text { font-size:12.5px; color:#888; }
+
+/* ── Misc ────────────────────────────────────────────────── */
+::-webkit-scrollbar { width:4px; height:4px; }
+::-webkit-scrollbar-track { background:transparent; }
+::-webkit-scrollbar-thumb { background:#2a2a3a; border-radius:2px; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- Toolbar -->
+  <div id="toolbar">
+    <h1>⬡ STEP Assembly Editor</h1>
+    <input type="file" id="fileInput" accept=".step,.stp,.STEP,.STP">
+    <label for="fileInput" class="tb-btn">Open STEP</label>
+    <span id="filename"></span>
+    <span id="apiPill" class="api-pill">···</span>
+    <span id="matchPill" class="match-pill"></span>
+    <button class="tb-btn primary" id="exportBtn" disabled>Export STEP</button>
+    <span id="statusBar"></span>
+  </div>
+
+  <!-- Sidebar -->
+  <div id="sidebar">
+    <div class="tab-bar">
+      <div class="tab-btn active" data-tab="groups">Groups</div>
+      <div class="tab-btn" data-tab="original">Original Tree</div>
+      <div class="tab-btn" data-tab="poses">Poses</div>
+    </div>
+    <div id="addGroupBar">
+      <input type="text" id="newGroupName" placeholder="New group name…">
+      <button class="tb-btn" id="addGroupBtn">+ Add</button>
+    </div>
+    <div id="groupsTab"   class="tab-content active"><div id="groupTree"></div></div>
+    <div id="originalTab" class="tab-content"><div id="origTree"></div></div>
+    <div id="posesTab"    class="tab-content"><div id="poseList"></div></div>
+  </div>
+
+  <!-- 3-D Viewer -->
+  <div id="viewer">
+    <canvas id="three-canvas"></canvas>
+
+    <div id="viewer-hint">
+      <div class="hint-card">
+        <h2>STEP Assembly Editor</h2>
+        <p>Open a STEP file to see the 3-D model and reorganize its component groups.</p>
+        <div class="hint-step"><b>1.</b> Open a STEP file</div>
+        <div class="hint-step"><b>2.</b> Components are auto-grouped (AI if key set)</div>
+        <div class="hint-step"><b>3.</b> Click a name or mesh to highlight it</div>
+        <div class="hint-step"><b>4.</b> Drag to rearrange, then Export STEP</div>
+      </div>
+    </div>
+
+    <div id="tooltip"></div>
+
+    <div id="viewer-btns">
+      <button id="fitBtn"  title="Fit all">⤢</button>
+      <button id="fitMatchesBtn" title="Fit matches">M</button>
+      <button id="axisBtn" title="Toggle XYZ axes on matched components">XYZ</button>
+      <button id="clearSelBtn" title="Clear selection">✕</button>
+    </div>
+    <div id="view-label">Scroll=zoom · Drag=orbit · Right-drag=pan</div>
+
+    <div id="overlay" class="hidden">
+      <div class="ov-box">
+        <div class="spinner"></div>
+        <div class="ov-text" id="overlayText">Loading…</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Three.js via importmap -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ─────────────────────────────────────────────────────────────
+// State
+// ─────────────────────────────────────────────────────────────
+const state = {
+  tree: null,
+  groups: null,
+  translations: {},
+  counts: {},
+  filename: null,
+  matches: null,
+};
+
+let selectedName = null;
+let hoveredName  = null;
+let draggedComp  = null;
+let matchedNames = new Set();
+let matchedCounts = {};
+
+// ─────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+function esc(s) {
+  return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function status(msg) { $('#statusBar').textContent = msg; }
+function showOverlay(msg) { $('#overlayText').textContent = msg; $('#overlay').classList.remove('hidden'); }
+function hideOverlay()    { $('#overlay').classList.add('hidden'); }
+
+function setMatches(matches) {
+  state.matches = matches || null;
+  matchedNames = new Set();
+  matchedCounts = {};
+
+  for (const rec of ((matches && matches.matches) || [])) {
+    const names = [rec.product_name, rec.occurrence_name].filter(Boolean);
+    for (const name of names) {
+      matchedNames.add(name);
+      matchedCounts[name] = (matchedCounts[name] || 0) + 1;
+    }
+  }
+
+  // Assembly nodes have no direct geometry — propagate match status to all
+  // descendant leaf nodes so their meshes get highlighted in the 3-D view.
+  if (state.tree && matchedNames.size > 0) {
+    const directlyMatched = new Set(matchedNames);
+    function addSubtree(node) {
+      matchedNames.add(node.name);
+      for (const c of (node.children || [])) addSubtree(c);
+    }
+    function walkForMatches(node) {
+      if (directlyMatched.has(node.name)) addSubtree(node);
+      else for (const c of (node.children || [])) walkForMatches(c);
+    }
+    walkForMatches(state.tree);
+  }
+
+  const count = (matches && matches.matched_instance_count) || ((matches && matches.matches || []).length);
+  const pill = $('#matchPill');
+  if (count > 0) {
+    pill.textContent = `${count} matches`;
+    pill.title = 'Matched components are highlighted in green';
+    pill.classList.add('show');
+  } else {
+    pill.textContent = '';
+    pill.title = '';
+    pill.classList.remove('show');
+  }
+  renderPosePanel();
+}
+
+function fmtVec(v, digits=2) {
+  if (!v || !Array.isArray(v)) return '—';
+  return v.map(x => (x === null || x === undefined) ? '—' : x.toFixed(digits)).join(', ');
+}
+
+function renderPosePanel() {
+  const el = $('#poseList');
+  if (!el) return;
+  const m = state.matches;
+  const records = (m && m.matches) || [];
+  if (!records.length) {
+    el.innerHTML = '<div class="pose-empty">No matches — load a STEP file and matches JSON.</div>';
+    return;
+  }
+  const ref = (m && m.component_anchor_frame) || null;
+  const refHtml = ref ? `
+    <div class="pose-ref">
+      <div class="pose-ref-title">Component anchor (reference)</div>
+      <div class="pose-line"><span class="pose-key">origin</span><span class="pose-val">${fmtVec(ref.origin, 3)}</span></div>
+      <div class="pose-line"><span class="pose-key">z axis</span><span class="pose-val">${fmtVec(ref.z_axis, 3)}</span></div>
+      <div class="pose-line"><span class="pose-key">x axis</span><span class="pose-val">${fmtVec(ref.x_axis, 3)}</span></div>
+      <div class="pose-line"><span class="pose-key">radius</span><span class="pose-val">${ref.radius != null ? ref.radius.toFixed(3) : '—'} mm (${ref.anchor_kind || '?'})</span></div>
+    </div>` : '';
+  const rows = records.map((r, i) => {
+    const xyz = r.pose_xyz, rpy = r.pose_rpy_deg, ank = r.anchor_origin_scene;
+    return `
+      <div class="pose-row" data-idx="${i}">
+        <div class="pose-head"><b>${r.nauo_id}</b> <span class="pose-sub">${r.product_name || ''}</span></div>
+        <div class="pose-line"><span class="pose-key">xyz</span><span class="pose-val">${fmtVec(xyz, 2)}</span></div>
+        <div class="pose-line"><span class="pose-key">rpy°</span><span class="pose-val">${fmtVec(rpy, 2)}</span></div>
+        <div class="pose-line"><span class="pose-key">anchor</span><span class="pose-val">${fmtVec(ank, 2)}</span></div>
+      </div>`;
+  }).join('');
+  el.innerHTML = refHtml + rows;
+}
+
+function isMatchedName(name) {
+  return matchedNames.has(name);
+}
+
+// ─────────────────────────────────────────────────────────────
+// Three.js scene
+// ─────────────────────────────────────────────────────────────
+const canvas   = $('#three-canvas');
+const viewerEl = $('#viewer');
+
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a0a16);
+
+const camera = new THREE.PerspectiveCamera(45, 1, 0.01, 1e7);
+camera.position.set(0, 0, 500);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.07;
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+const dl1 = new THREE.DirectionalLight(0xffffff, 0.9); dl1.position.set(1,2,3);   scene.add(dl1);
+const dl2 = new THREE.DirectionalLight(0x8899ff, 0.3); dl2.position.set(-1,-1,-1); scene.add(dl2);
+
+new ResizeObserver(() => {
+  const w = viewerEl.clientWidth, h = viewerEl.clientHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}).observe(viewerEl);
+
+(function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  renderer.render(scene, camera);
+})();
+
+function fitCameraToBox(box) {
+  if (!box || box.isEmpty()) return;
+  const center = box.getCenter(new THREE.Vector3());
+  const size   = box.getSize(new THREE.Vector3());
+  const maxDim = Math.max(size.x, size.y, size.z) || 1;
+  const fov    = camera.fov * (Math.PI / 180);
+  const dist   = (maxDim / (2 * Math.tan(fov / 2))) * 1.6;
+  controls.target.copy(center);
+  camera.position.set(center.x + dist * 0.4, center.y + dist * 0.3, center.z + dist);
+  camera.near = dist / 1000; camera.far = dist * 1000;
+  camera.updateProjectionMatrix();
+  controls.update();
+}
+function fitAll() {
+  const box = new THREE.Box3();
+  scene.traverse(o => { if (o.isMesh) box.expandByObject(o); });
+  fitCameraToBox(box);
+}
+function fitMatches() {
+  const box = new THREE.Box3();
+  for (const m of allMeshes) {
+    if (isMatchedName(m.userData.componentName)) box.expandByObject(m);
+  }
+  if (!box.isEmpty()) fitCameraToBox(box);
+}
+
+function placeMatchAxes() {
+  if (axisGroup) { scene.remove(axisGroup); axisGroup = null; }
+  const records = (state.matches && state.matches.matches) || [];
+  if (!records.length) return;
+
+  const box = new THREE.Box3();
+  for (const m of allMeshes) box.expandByObject(m);
+  const size = box.getSize(new THREE.Vector3());
+  const axisSize = Math.max(size.x, size.y, size.z) * 0.06 || 100;
+
+  axisGroup = new THREE.Group();
+  for (const rec of records) {
+    // Prefer the resolved anchor origin in scene coords; orient by rotation_matrix.
+    const c = rec.anchor_origin_scene || rec.pose_xyz
+           || rec.geometry_bottom_center || rec.geometry_center;
+    if (!c || c.some(v => v === null)) continue;
+    const axes = new THREE.AxesHelper(axisSize);
+    axes.position.set(c[0], c[1], c[2]);
+    const R = rec.rotation_matrix;
+    if (R && R.length === 3) {
+      const m = new THREE.Matrix4();
+      m.set(
+        R[0][0], R[0][1], R[0][2], 0,
+        R[1][0], R[1][1], R[1][2], 0,
+        R[2][0], R[2][1], R[2][2], 0,
+        0, 0, 0, 1,
+      );
+      axes.quaternion.setFromRotationMatrix(m);
+    }
+    axisGroup.add(axes);
+  }
+  axisGroup.visible = axisVisible;
+  scene.add(axisGroup);
+}
+
+$('#fitBtn').addEventListener('click', fitAll);
+$('#fitMatchesBtn').addEventListener('click', fitMatches);
+$('#axisBtn').addEventListener('click', () => {
+  axisVisible = !axisVisible;
+  if (axisGroup) axisGroup.visible = axisVisible;
+  $('#axisBtn').classList.toggle('active', axisVisible);
+});
+$('#clearSelBtn').addEventListener('click', () => selectComponent(null));
+
+// ─────────────────────────────────────────────────────────────
+// Mesh registry & colors
+// ─────────────────────────────────────────────────────────────
+let allMeshes   = [];
+let nameToMeshes = {}; // componentName -> THREE.Mesh[]
+let groupColors  = {}; // groupName -> THREE.Color hex int
+let axisGroup    = null;
+let axisVisible  = false;
+
+const PALETTE = [
+  0x4db8ff, 0x57cc99, 0xffd166, 0xe94560, 0xa78bfa,
+  0xf97316, 0x06b6d4, 0x84cc16, 0xec4899, 0xff9f1c,
+];
+const COL_DEFAULT  = 0x4a6a8a;
+const COL_SELECTED = 0xffe060;
+const COL_OTHER    = 0x556677;
+const COL_MATCH    = 0x39e58c;
+
+function assignGroupColors(groups) {
+  groupColors = {};
+  let i = 0;
+  for (const g of Object.keys(groups)) {
+    groupColors[g] = (g === 'Other') ? COL_OTHER : PALETTE[i++ % PALETTE.length];
+  }
+}
+
+function getGroupOfComp(name) {
+  if (!state.groups) return null;
+  for (const [g, ms] of Object.entries(state.groups)) {
+    if (ms.includes(name)) return g;
+  }
+  return null;
+}
+
+function applyColors() {
+  for (const m of allMeshes) {
+    const g = getGroupOfComp(m.userData.componentName);
+    const col = isMatchedName(m.userData.componentName) ? COL_MATCH : (groupColors[g] ?? COL_DEFAULT);
+    m.material.color.setHex(col);
+    m.material.opacity = 1; m.material.transparent = false;
+    m.material.emissive.setHex(isMatchedName(m.userData.componentName) ? 0x06331d : 0);
+  }
+}
+
+function selectComponent(name, focusCamera = true) {
+  selectedName = name;
+
+  if (!name) {
+    applyColors();
+    renderGroups();
+    return;
+  }
+
+  // Dim everything, highlight selection
+  for (const m of allMeshes) {
+    if (m.userData.componentName === name) {
+      m.material.color.setHex(COL_SELECTED);
+      m.material.emissive.setHex(0x332200);
+      m.material.opacity = 1; m.material.transparent = false;
+    } else {
+      m.material.opacity = 0.13; m.material.transparent = true;
+      m.material.emissive.setHex(0);
+    }
+  }
+
+  if (focusCamera) {
+    const box = new THREE.Box3();
+    for (const m of (nameToMeshes[name] || [])) box.expandByObject(m);
+    if (!box.isEmpty()) fitCameraToBox(box);
+  }
+
+  renderGroups();
+  scrollToComp(name);
+}
+
+// ─────────────────────────────────────────────────────────────
+// occt-import-js — runs in a Web Worker so the UI never blocks
+// ─────────────────────────────────────────────────────────────
+//
+// ReadStepFile() is a synchronous WASM call that can take 5-30 s
+// on large files. Running it in a Worker keeps the Three.js canvas
+// and the rest of the UI fully responsive.
+
+const WORKER_SRC = /* js */`
+const CDN = 'https://cdn.jsdelivr.net/npm/occt-import-js@0.0.22/dist/';
+
+// importScripts works for classic Workers with Emscripten UMD bundles.
+importScripts(CDN + 'occt-import-js.js');
+
+let occt = null;
+
+// init runs once; we signal 'ready' when WASM is loaded.
+(async () => {
+  try {
+    const factory = self.occtimportjs;
+    if (typeof factory !== 'function')
+      throw new Error('occtimportjs global not found after importScripts');
+    occt = await factory({ locateFile: p => CDN + p });
+    self.postMessage({ type: 'ready' });
+  } catch (e) {
+    self.postMessage({ type: 'init_error', msg: String(e) });
+  }
+})();
+
+self.onmessage = async ({ data }) => {
+  if (!occt) { self.postMessage({ type: 'error', msg: 'occt not initialised' }); return; }
+
+  self.postMessage({ type: 'progress', msg: 'Tessellating 3-D geometry…' });
+
+  let result;
+  try {
+    result = occt.ReadStepFile(new Uint8Array(data.buffer), null);
+  } catch (e) {
+    self.postMessage({ type: 'error', msg: String(e) });
+    return;
+  }
+
+  if (!result || !result.success) {
+    self.postMessage({ type: 'error', msg: 'ReadStepFile failed' });
+    return;
+  }
+
+  self.postMessage({ type: 'progress', msg: 'Packaging mesh data…' });
+
+  const out = [];
+  for (const m of (result.meshes || [])) {
+    // occt-import-js@0.0.22 stores geometry at mesh level, not per-face:
+    //   m.attributes.position.array  – flat XYZ vertex positions
+    //   m.attributes.normal.array    – flat XYZ normals (optional)
+    //   m.index.array                – triangle indices
+    const posArr = m.attributes && m.attributes.position && m.attributes.position.array;
+    const idxArr = m.index && m.index.array;
+    if (!posArr || !posArr.length || !idxArr || !idxArr.length) continue;
+
+    const v = new Float32Array(posArr);
+    const i = new Uint32Array(idxArr);
+    const normArr = m.attributes && m.attributes.normal && m.attributes.normal.array;
+    const n = (normArr && normArr.length) ? new Float32Array(normArr) : null;
+
+    out.push({ name: m.name || '', v, n, i });
+  }
+
+  const transferable = out.flatMap(m => m.n ? [m.v.buffer, m.i.buffer, m.n.buffer] : [m.v.buffer, m.i.buffer]);
+  self.postMessage({ type: 'done', meshes: out }, transferable);
+};
+`;
+
+// ── Worker lifecycle ──────────────────────────────────────────
+let _worker      = null;   // the Worker instance
+let _workerReady = null;   // Promise<void> — resolves when WASM is loaded
+
+function ensureWorker() {
+  if (_worker) return { worker: _worker, ready: _workerReady };
+
+  const blob = new Blob([WORKER_SRC], { type: 'application/javascript' });
+  _worker = new Worker(URL.createObjectURL(blob));
+
+  _workerReady = new Promise((resolve, reject) => {
+    const h = ({ data }) => {
+      if (data.type === 'ready')      { _worker.removeEventListener('message', h); resolve(); }
+      if (data.type === 'init_error') { _worker.removeEventListener('message', h); reject(new Error(data.msg)); }
+    };
+    _worker.addEventListener('message', h);
+    _worker.addEventListener('error', e => reject(e), { once: true });
+  });
+
+  return { worker: _worker, ready: _workerReady };
+}
+
+// Pre-warm: start downloading the WASM while the user is still browsing.
+ensureWorker();
+
+// ── Main entry point called after upload ─────────────────────
+async function buildMeshesFromStep(fileBuffer) {
+  // Dispose previous scene meshes
+  for (const m of allMeshes) { scene.remove(m); m.geometry.dispose(); }
+  allMeshes = []; nameToMeshes = {};
+
+  showOverlay('Loading 3-D engine…');
+
+  let worker;
+  try {
+    const w = ensureWorker();
+    worker = w.worker;
+    await w.ready;
+  } catch (e) {
+    hideOverlay();
+    status('3-D engine failed to load: ' + e.message);
+    return;
+  }
+
+  showOverlay('Tessellating 3-D geometry…');
+
+  await new Promise((resolve) => {
+    // One-shot message handler for this job
+    const handler = ({ data }) => {
+      if (data.type === 'progress') {
+        showOverlay(data.msg);
+        return;
+      }
+      worker.removeEventListener('message', handler);
+      if (data.type === 'error') {
+        hideOverlay();
+        status('3-D error: ' + data.msg);
+        resolve(); return;
+      }
+      if (data.type === 'done') {
+        // Build Three.js geometry from transferred typed arrays { name, v, n, i }
+        for (const meshData of data.meshes) {
+          const geo = new THREE.BufferGeometry();
+          geo.setAttribute('position', new THREE.BufferAttribute(meshData.v, 3));
+          if (meshData.n) {
+            geo.setAttribute('normal', new THREE.BufferAttribute(meshData.n, 3));
+          }
+          geo.setIndex(new THREE.BufferAttribute(meshData.i, 1));
+          if (!meshData.n) geo.computeVertexNormals();
+          const mat  = new THREE.MeshPhongMaterial({ color: COL_DEFAULT, specular: 0x111122, shininess: 40 });
+          const mesh = new THREE.Mesh(geo, mat);
+          mesh.userData.componentName = meshData.name;
+          scene.add(mesh);
+          allMeshes.push(mesh);
+          if (!nameToMeshes[meshData.name]) nameToMeshes[meshData.name] = [];
+          nameToMeshes[meshData.name].push(mesh);
+        }
+        hideOverlay();
+        if (allMeshes.length === 0) {
+          status('No renderable geometry in STEP file');
+        } else {
+          fitAll();
+          applyColors();
+          placeMatchAxes();
+          const matchCount = state.matches ? (state.matches.matched_instance_count || (state.matches.matches || []).length) : 0;
+          status(matchCount > 0 ? `3-D ready — ${allMeshes.length} meshes, ${matchCount} matches highlighted` : `3-D ready — ${allMeshes.length} meshes`);
+          if (matchCount > 0) fitMatches();
+        }
+        resolve();
+      }
+    };
+
+    worker.addEventListener('message', handler);
+    worker.onerror = (e) => {
+      worker.removeEventListener('message', handler);
+      hideOverlay();
+      status('Worker crashed: ' + e.message);
+      _worker = null; _workerReady = null; // force recreate next time
+      resolve();
+    };
+
+    // Transfer the ArrayBuffer to the worker (zero-copy, fileBuffer is detached after this)
+    worker.postMessage({ buffer: fileBuffer }, [fileBuffer]);
+  });
+}
+
+// ─────────────────────────────────────────────────────────────
+// 3-D mouse interaction
+// ─────────────────────────────────────────────────────────────
+const raycaster = new THREE.Raycaster();
+const mouse     = new THREE.Vector2();
+const tooltip   = $('#tooltip');
+let lastClickTime = 0;
+
+renderer.domElement.addEventListener('pointermove', e => {
+  if (allMeshes.length === 0) return;
+  const rect = renderer.domElement.getBoundingClientRect();
+  mouse.x = ((e.clientX - rect.left)  / rect.width)  * 2 - 1;
+  mouse.y = -((e.clientY - rect.top)  / rect.height) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+  const hits = raycaster.intersectObjects(allMeshes);
+
+  if (hits.length > 0) {
+    const name  = hits[0].object.userData.componentName;
+    const eng   = state.translations[name] || '';
+    const grp   = getGroupOfComp(name);
+    const cnt   = state.counts[name] || 1;
+    const matched = isMatchedName(name);
+    const matchCount = matchedCounts[name] || 0;
+    tooltip.style.display = 'block';
+    tooltip.style.left = (e.clientX - rect.left + 14) + 'px';
+    tooltip.style.top  = (e.clientY - rect.top  - 10) + 'px';
+    tooltip.innerHTML =
+      `<div class="tt-name">${esc(name)}</div>` +
+      (eng  ? `<div class="tt-eng">${esc(eng)}</div>`  : '') +
+      (grp  ? `<div class="tt-group">Group: ${esc(grp)}</div>` : '') +
+      (cnt>1 ? `<div class="tt-count">×${cnt} instances</div>` : '') +
+      (matched ? `<div class="tt-match">${matchCount || 1} matched instance${(matchCount || 1) === 1 ? '' : 's'}</div>` : '');
+
+    // Hover highlight when nothing selected
+    if (!selectedName && name !== hoveredName) {
+      if (hoveredName) for (const m of (nameToMeshes[hoveredName]||[])) m.material.emissive.setHex(0);
+      hoveredName = name;
+      for (const m of (nameToMeshes[name]||[])) m.material.emissive.setHex(0x112233);
+    }
+    renderer.domElement.style.cursor = 'pointer';
+  } else {
+    tooltip.style.display = 'none';
+    if (hoveredName && !selectedName) {
+      for (const m of (nameToMeshes[hoveredName]||[])) m.material.emissive.setHex(0);
+      hoveredName = null;
+    }
+    renderer.domElement.style.cursor = '';
+  }
+});
+
+renderer.domElement.addEventListener('pointerleave', () => {
+  tooltip.style.display = 'none';
+});
+
+renderer.domElement.addEventListener('click', e => {
+  // Debounce against orbit-end click
+  const now = Date.now();
+  if (now - lastClickTime < 200) return;
+  lastClickTime = now;
+
+  if (allMeshes.length === 0) return;
+  const rect = renderer.domElement.getBoundingClientRect();
+  mouse.x = ((e.clientX - rect.left) / rect.width)  * 2 - 1;
+  mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+  const hits = raycaster.intersectObjects(allMeshes);
+  if (hits.length > 0) {
+    const name = hits[0].object.userData.componentName;
+    if (name === selectedName) selectComponent(null);
+    else selectComponent(name, false); // camera already near the object
+  } else {
+    selectComponent(null);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// Tabs
+// ─────────────────────────────────────────────────────────────
+$$('.tab-btn').forEach(btn => btn.addEventListener('click', () => {
+  $$('.tab-btn').forEach(b => b.classList.remove('active'));
+  $$('.tab-content').forEach(c => c.classList.remove('active'));
+  btn.classList.add('active');
+  $(`#${btn.dataset.tab}Tab`).classList.add('active');
+}));
+
+// ─────────────────────────────────────────────────────────────
+// Upload — parse server-side AND build 3-D
+// ─────────────────────────────────────────────────────────────
+$('#fileInput').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  e.target.value = '';
+
+  showOverlay('Parsing assembly tree…');
+  status('Uploading…');
+
+  // Read the file buffer for 3-D rendering in parallel
+  const bufferPromise = file.arrayBuffer();
+
+  const form = new FormData();
+  form.append('file', file);
+
+  let uploadData;
+  try {
+    const res = await fetch('/api/upload', { method:'POST', body:form });
+    uploadData = await res.json();
+    if (uploadData.error) { hideOverlay(); status('Error: ' + uploadData.error); return; }
+  } catch (err) { hideOverlay(); status('Upload failed: ' + err.message); return; }
+
+  state.tree         = uploadData.tree;
+  state.translations = uploadData.translations || {};
+  state.filename     = uploadData.filename;
+  state.counts       = {};
+  state.groups       = null;
+  setMatches(null);
+  selectedName       = null;
+
+  walkTree(uploadData.tree, n => { if (n.name !== 'root') state.counts[n.name] = n.count; });
+
+  $('#filename').textContent = uploadData.filename;
+  $('#viewer-hint').style.display = 'none';
+  renderOrigTree(uploadData.tree);
+  $('#groupTree').innerHTML = '';
+
+  status(`Parsed — ${uploadData.entity_count} entities. Auto-clustering…`);
+
+  // Auto-cluster
+  showOverlay('Clustering components…');
+  try {
+    const cRes = await fetch('/api/cluster', { method:'POST' });
+    const cData = await cRes.json();
+    if (!cData.error) {
+      state.groups = cData.groups;
+      if (cData.translations) Object.assign(state.translations, cData.translations);
+      assignGroupColors(state.groups);
+      renderGroups();
+      $('#addGroupBar').classList.add('show');
+      $('#exportBtn').disabled = false;
+      $$('.tab-btn')[0].click();
+      const nGroups = Object.keys(state.groups).length;
+      const hits    = cData.cache_hits ?? 0;
+      const calls   = cData.api_calls  ?? 0;
+      let method;
+      if (cData.used_api)      method = `🤖 AI · ${hits} cached, ${calls} translated`;
+      else if (hits > 0)       method = `⌗ prefix · ${hits} from cache`;
+      else                     method = '⌗ prefix';
+      status(`${nGroups} groups — ${method}`);
+    }
+  } catch(err) {
+    status('Clustering failed: ' + err.message);
+  }
+
+  hideOverlay();
+
+  // Build 3-D meshes (may take a while for large files)
+  const fileBuffer = await bufferPromise;
+  buildMeshesFromStep(fileBuffer);  // async, shows its own overlay
+});
+
+function walkTree(node, fn) {
+  fn(node);
+  (node.children || []).forEach(c => walkTree(c, fn));
+}
+
+function scrollToComp(name) {
+  const el = $(`[data-comp="${CSS.escape(name)}"]`);
+  if (el) el.scrollIntoView({ behavior:'smooth', block:'nearest' });
+}
+
+// ─────────────────────────────────────────────────────────────
+// Original tree
+// ─────────────────────────────────────────────────────────────
+function renderOrigTree(tree) {
+  $('#origTree').innerHTML = '';
+  $('#origTree').appendChild(buildOrigNode(tree));
+}
+
+function buildOrigNode(node) {
+  const div = document.createElement('div');
+  div.className = 'orig-node' + (isMatchedName(node.name) ? ' matched' : '');
+  const hasKids = node.children && node.children.length > 0;
+  const eng   = state.translations[node.name] || '';
+  const count = node.count > 1 ? ` ×${node.count}` : '';
+  const matchCount = matchedCounts[node.name] || 0;
+
+  div.innerHTML =
+    (hasKids ? `<span class="orig-toggle" data-x="1">▾</span>` : `<span style="display:inline-block;width:14px"></span>`) +
+    `<span class="orig-name">${esc(node.name)}</span>` +
+    (count ? `<span class="orig-count">${count}</span>` : '') +
+    (matchCount ? `<span class="orig-match">match ×${matchCount}</span>` : '') +
+    (eng   ? `<span class="orig-eng">${esc(eng)}</span>` : '');
+
+  if (hasKids) {
+    const kids = document.createElement('div');
+    kids.className = 'orig-children';
+    node.children.forEach(c => kids.appendChild(buildOrigNode(c)));
+    div.appendChild(kids);
+    div.querySelector('.orig-toggle').addEventListener('click', ev => {
+      ev.stopPropagation();
+      const t = ev.target, open = t.dataset.x === '1';
+      t.dataset.x = open ? '0' : '1';
+      t.textContent = open ? '▸' : '▾';
+      kids.classList.toggle('collapsed', open);
+    });
+  }
+  return div;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Group tree
+// ─────────────────────────────────────────────────────────────
+function renderGroups() {
+  const container = $('#groupTree');
+  container.innerHTML = '';
+  if (!state.groups) return;
+  for (const [g, members] of Object.entries(state.groups)) {
+    container.appendChild(buildGroupEl(g, members));
+  }
+}
+
+function buildGroupEl(groupName, members) {
+  const color = groupColors[groupName] ?? COL_DEFAULT;
+  const hex   = '#' + color.toString(16).padStart(6, '0');
+
+  const div = document.createElement('div');
+  div.className = 'tree-group';
+  div.dataset.group = groupName;
+
+  const header = document.createElement('div');
+  header.className = 'group-header';
+  header.innerHTML = `
+    <span class="g-dot" style="background:${hex}"></span>
+    <span class="g-caret open">▶</span>
+    <span class="g-name">${esc(groupName)}</span>
+    <span class="g-count">${members.length}</span>
+    <span class="g-actions">
+      <button class="act-btn rename-btn" title="Rename">✎</button>
+      <button class="act-btn del-grp-btn" title="Delete group">✕</button>
+    </span>`;
+  div.appendChild(header);
+
+  const childDiv = document.createElement('div');
+  childDiv.className = 'group-children';
+  members.forEach(n => childDiv.appendChild(buildCompEl(n)));
+  div.appendChild(childDiv);
+
+  // Toggle
+  const caret = header.querySelector('.g-caret');
+  const toggle = () => { caret.classList.toggle('open'); childDiv.classList.toggle('collapsed'); };
+  caret.addEventListener('click', e => { e.stopPropagation(); toggle(); });
+  header.addEventListener('click', toggle);
+
+  // Hover → highlight group meshes
+  header.addEventListener('mouseenter', () => {
+    if (selectedName) return;
+    header.classList.add('hovered');
+    for (const name of members) {
+      for (const m of (nameToMeshes[name]||[])) m.material.emissive.setHex(0x112233);
+    }
+  });
+  header.addEventListener('mouseleave', () => {
+    header.classList.remove('hovered');
+    if (!selectedName) {
+      for (const name of members) {
+        for (const m of (nameToMeshes[name]||[])) m.material.emissive.setHex(0);
+      }
+    }
+  });
+
+  // Rename
+  header.querySelector('.rename-btn').addEventListener('click', async e => {
+    e.stopPropagation();
+    const nameEl = header.querySelector('.g-name');
+    const input  = document.createElement('input');
+    input.value  = groupName;
+    nameEl.innerHTML = '';
+    nameEl.appendChild(input);
+    input.focus(); input.select();
+    const doRename = async () => {
+      const n = input.value.trim();
+      if (n && n !== groupName) {
+        await fetch('/api/rename-group', {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ old_name: groupName, new_name: n }),
+        });
+        state.groups[n] = state.groups[groupName];
+        delete state.groups[groupName];
+        groupColors[n] = groupColors[groupName];
+        delete groupColors[groupName];
+        if (selectedName && getGroupOfComp(selectedName) === null) selectedName = null;
+        renderGroups();
+      } else { nameEl.textContent = groupName; }
+    };
+    input.addEventListener('blur', doRename);
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') input.blur();
+      if (e.key === 'Escape') { input.value = groupName; input.blur(); }
+    });
+  });
+
+  // Delete group
+  header.querySelector('.del-grp-btn').addEventListener('click', async e => {
+    e.stopPropagation();
+    if (!confirm(`Delete group "${groupName}"?\nComponents will move to Other.`)) return;
+    const res  = await fetch('/api/delete-node', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ name: groupName, type:'group' }),
+    });
+    const data = await res.json();
+    state.groups = data.groups;
+    assignGroupColors(state.groups);
+    applyColors();
+    renderGroups();
+  });
+
+  // Drag-drop target
+  header.addEventListener('dragover', e => { e.preventDefault(); header.classList.add('drag-over'); });
+  header.addEventListener('dragleave', () => header.classList.remove('drag-over'));
+  header.addEventListener('drop', async e => {
+    e.preventDefault(); header.classList.remove('drag-over');
+    if (!draggedComp) return;
+    const res  = await fetch('/api/move', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ component: draggedComp, target_group: groupName }),
+    });
+    const data = await res.json();
+    state.groups = data.groups;
+    applyColors();
+    renderGroups();
+    draggedComp = null;
+    status(`Moved to "${groupName}"`);
+  });
+
+  return div;
+}
+
+function buildCompEl(name) {
+  const div = document.createElement('div');
+  div.className =
+    'comp-node' +
+    (isMatchedName(name) ? ' matched' : '') +
+    (name === selectedName ? ' selected' : '');
+  div.dataset.comp = name;
+  div.draggable = true;
+
+  const eng   = state.translations[name] || '';
+  const count = state.counts[name] || 1;
+  const matchCount = matchedCounts[name] || 0;
+
+  div.innerHTML =
+    `<span class="c-name" title="${esc(name)}">${esc(name)}</span>` +
+    (eng    ? `<span class="c-eng" title="${esc(eng)}">${esc(eng)}</span>` : '') +
+    (matchCount ? `<span class="c-match" title="Matched instances">M×${matchCount}</span>` : '') +
+    (count>1 ? `<span class="c-count">×${count}</span>` : '') +
+    `<button class="c-del" title="Remove">✕</button>`;
+
+  // Click → select in 3-D
+  div.addEventListener('click', e => {
+    if (e.target.classList.contains('c-del')) return;
+    if (name === selectedName) selectComponent(null);
+    else selectComponent(name);
+  });
+
+  div.addEventListener('dragstart', e => {
+    draggedComp = name; div.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+  });
+  div.addEventListener('dragend', () => {
+    div.classList.remove('dragging'); draggedComp = null;
+  });
+
+  div.querySelector('.c-del').addEventListener('click', async e => {
+    e.stopPropagation();
+    const res  = await fetch('/api/delete-node', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ name, type:'component' }),
+    });
+    const data = await res.json();
+    state.groups = data.groups;
+    if (selectedName === name) selectComponent(null);
+    else { applyColors(); renderGroups(); }
+    status(`Removed "${name}"`);
+  });
+
+  return div;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Add group
+// ─────────────────────────────────────────────────────────────
+$('#addGroupBtn').addEventListener('click', async () => {
+  const input = $('#newGroupName');
+  const name  = input.value.trim();
+  if (!name) return;
+  const res  = await fetch('/api/create-group', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ name }),
+  });
+  const data = await res.json();
+  if (data.error) { status(data.error); return; }
+  state.groups = data.groups;
+  assignGroupColors(state.groups);
+  applyColors();
+  renderGroups();
+  input.value = '';
+  status(`Created group "${name}"`);
+});
+$('#newGroupName').addEventListener('keydown', e => { if (e.key==='Enter') $('#addGroupBtn').click(); });
+
+// ─────────────────────────────────────────────────────────────
+// Export
+// ─────────────────────────────────────────────────────────────
+$('#exportBtn').addEventListener('click', async () => {
+  status('Exporting…');
+  try {
+    const res = await fetch('/api/export');
+    if (!res.ok) { const d = await res.json(); status('Export error: ' + d.error); return; }
+    const blob = await res.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url;
+    a.download = res.headers.get('content-disposition')?.match(/filename="(.+)"/)?.[1] || 'restructured.step';
+    a.click();
+    URL.revokeObjectURL(url);
+    status('Export complete ✓');
+  } catch(err) { status('Export failed: ' + err.message); }
+});
+
+// ─────────────────────────────────────────────────────────────
+// Check API key & restore pre-loaded session
+// ─────────────────────────────────────────────────────────────
+(async () => {
+  // API pill
+  try {
+    const cfg = await (await fetch('/api/config')).json();
+    const pill = $('#apiPill');
+    if (cfg.has_api_key) {
+      pill.textContent = 'DeepSeek AI ✓';
+      pill.className   = 'api-pill on';
+      pill.title       = 'DEEPSEEK_API_KEY is set — semantic clustering enabled';
+    } else {
+      pill.textContent = 'No AI key';
+      pill.className   = 'api-pill off';
+      pill.title       = 'Set DEEPSEEK_API_KEY to enable semantic clustering';
+    }
+  } catch {}
+
+  // Restore session if server was pre-loaded with --step
+  try {
+    const data = await (await fetch('/api/session')).json();
+    if (!data.loaded) return;
+
+    state.tree         = data.tree;
+    state.translations = data.translations || {};
+    state.counts       = data.component_counts || {};
+    state.filename     = data.filename;
+    state.groups       = data.groups;
+    setMatches(data.matches || null);
+
+    $('#filename').textContent  = data.filename;
+    $('#viewer-hint').style.display = 'none';
+    renderOrigTree(data.tree);
+
+    if (data.groups) {
+      assignGroupColors(data.groups);
+      renderGroups();
+      $('#addGroupBar').classList.add('show');
+      $('#exportBtn').disabled = false;
+    }
+
+    status(`Session restored: ${data.filename}`);
+
+    // Fetch STEP file for 3-D rendering
+    showOverlay('Loading 3-D model…');
+    try {
+      const stepRes = await fetch('/api/step-file');
+      if (stepRes.ok) {
+        const buf = await stepRes.arrayBuffer();
+        buildMeshesFromStep(buf);
+      } else { hideOverlay(); }
+    } catch { hideOverlay(); }
+  } catch {}
+})();
+</script>
+</body>
+</html>
