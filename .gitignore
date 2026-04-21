@@ -40,7 +40,7 @@ Thumbs.db
 # Project
 output/
 resources/
-config/translations.json
+**/config/translations.json
 *.log
 
 # Claude / Codex

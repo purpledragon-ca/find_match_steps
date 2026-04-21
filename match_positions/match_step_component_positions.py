@@ -2490,6 +2490,30 @@ def build_fused_debug_frame(
     }
 
 
+def collect_descendant_names(model: StepModel, pd_id: str) -> list[str]:
+    """Walk the subtree rooted at ``pd_id`` and return every PD/occurrence name
+    found along the way, including ``pd_id``'s own name. Used by the viewer to
+    highlight all meshes that live under a matched assembly — occt-import-js
+    tessellates leaves, whose names don't match the assembly's own name.
+    """
+    names: set[str] = set()
+    stack: list[str] = [pd_id]
+    visited: set[str] = set()
+    while stack:
+        cur = stack.pop()
+        if cur in visited:
+            continue
+        visited.add(cur)
+        pd_name = model.pd_to_name.get(cur)
+        if pd_name:
+            names.add(pd_name)
+        for occ in model.children_of.get(cur, []):
+            if occ.occurrence_name:
+                names.add(occ.occurrence_name)
+            stack.append(occ.child_pd)
+    return sorted(names)
+
+
 def position_record(model: StepModel, occ: Occurrence, root_center: Vector3 | None) -> dict:
     child_bbox = product_bbox(model, occ.child_pd)
     parent_bbox = product_bbox(model, occ.parent_pd)
@@ -2526,6 +2550,7 @@ def position_record(model: StepModel, occ: Occurrence, root_center: Vector3 | No
         'geometry_size': vector_round(bbox_size(child_bbox)),
         'relative_to_parent_center': vector_round(rel_parent),
         'relative_to_root_center': vector_round(rel_root),
+        'descendant_names': collect_descendant_names(model, occ.child_pd),
     }
 
 

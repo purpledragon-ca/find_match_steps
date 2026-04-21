@@ -28,8 +28,6 @@ body { font-family:'Segoe UI',system-ui,sans-serif; background:#1a1a2e; color:#e
 .api-pill.on  { background:#0d2b1a; color:#57cc99; border:1px solid #1d5a2a; }
 .api-pill.off { background:#2a1212; color:#cc7766; border:1px solid #5a2222; }
 .api-pill.busy{ background:#1a1a0d; color:#ccaa44; border:1px solid #5a4a0a; }
-.match-pill { display:none; font-size:11px; padding:3px 9px; border-radius:10px; white-space:nowrap; flex-shrink:0; background:#082419; color:#39e58c; border:1px solid #17633f; }
-.match-pill.show { display:inline-block; }
 
 /* ── Sidebar tabs ────────────────────────────────────────── */
 .tab-bar { display:flex; border-bottom:1px solid #0f3460; flex-shrink:0; }
@@ -62,30 +60,14 @@ body { font-family:'Segoe UI',system-ui,sans-serif; background:#1a1a2e; color:#e
 .group-children { padding-left:18px; overflow:hidden; }
 .group-children.collapsed { display:none; }
 
-/* ── Pose panel ──────────────────────────────────────────── */
-#poseList { padding:8px 10px; font-size:12px; font-family:'SF Mono','Consolas',monospace; }
-.pose-empty { color:#667; padding:12px 4px; font-style:italic; font-family:'Segoe UI',system-ui,sans-serif; }
-.pose-ref { background:#162033; border:1px solid #0f3460; border-radius:5px; padding:7px 9px; margin-bottom:10px; }
-.pose-ref-title { font-size:11px; color:#e94560; font-weight:700; margin-bottom:4px; letter-spacing:.3px; text-transform:uppercase; font-family:'Segoe UI',system-ui,sans-serif; }
-.pose-row { background:#121a2a; border:1px solid #243052; border-radius:5px; padding:6px 9px; margin-bottom:6px; }
-.pose-row:hover { border-color:#533483; }
-.pose-head { font-size:12px; margin-bottom:3px; color:#39e58c; font-family:'Segoe UI',system-ui,sans-serif; }
-.pose-sub  { color:#88a; font-weight:normal; margin-left:6px; }
-.pose-line { display:flex; gap:8px; font-size:11.5px; color:#bcd; padding:1px 0; }
-.pose-key  { color:#8aa; min-width:52px; }
-.pose-val  { color:#dde; }
-
 /* ── Component nodes ─────────────────────────────────────── */
 .comp-node { display:flex; align-items:center; padding:3px 6px 3px 10px; margin:0 5px; border-radius:4px; cursor:pointer; gap:5px; font-size:12px; user-select:none; border-left:2px solid transparent; }
 .comp-node:hover { background:#16213e; }
 .comp-node.dragging { opacity:.3; }
 .comp-node.selected { background:#162030; border-left-color:#e94560; }
-.comp-node.matched { background:#10251d; border-left-color:#39e58c; }
-.comp-node.matched.selected { background:#26301a; border-left-color:#ffe060; }
 .comp-node .c-name  { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .comp-node .c-eng   { color:#5a9; font-size:11px; flex-shrink:0; max-width:130px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .comp-node .c-count { color:#666; font-size:11px; flex-shrink:0; }
-.comp-node .c-match { color:#39e58c; font-size:11px; flex-shrink:0; }
 .comp-node .c-del   { display:none; background:none; border:none; color:#666; cursor:pointer; font-size:11px; padding:0 2px; flex-shrink:0; }
 .comp-node:hover .c-del { display:block; }
 .comp-node .c-del:hover { color:#e94560; }
@@ -94,10 +76,8 @@ body { font-family:'Segoe UI',system-ui,sans-serif; background:#1a1a2e; color:#e
 .orig-node { padding:2px 0 2px 10px; font-size:12px; }
 .orig-toggle { cursor:pointer; user-select:none; color:#666; margin-right:3px; }
 .orig-name  { color:#ccc; }
-.orig-node.matched > .orig-name { color:#39e58c; font-weight:600; }
 .orig-eng   { color:#5a9; font-size:11px; margin-left:5px; }
 .orig-count { color:#555; font-size:11px; margin-left:3px; }
-.orig-match { color:#39e58c; font-size:11px; margin-left:4px; }
 .orig-children { padding-left:14px; }
 .orig-children.collapsed { display:none; }
 
@@ -116,7 +96,6 @@ body { font-family:'Segoe UI',system-ui,sans-serif; background:#1a1a2e; color:#e
 #tooltip .tt-eng   { color:#5a9; margin-top:3px; }
 #tooltip .tt-group { color:#666; font-size:11px; margin-top:2px; }
 #tooltip .tt-count { color:#888; font-size:11px; margin-top:1px; }
-#tooltip .tt-match { color:#39e58c; font-size:11px; margin-top:2px; }
 
 /* ── Viewer controls ─────────────────────────────────────── */
 #viewer-btns { position:absolute; top:10px; right:10px; display:flex; flex-direction:column; gap:4px; z-index:10; }
@@ -149,7 +128,6 @@ body { font-family:'Segoe UI',system-ui,sans-serif; background:#1a1a2e; color:#e
     <label for="fileInput" class="tb-btn">Open STEP</label>
     <span id="filename"></span>
     <span id="apiPill" class="api-pill">···</span>
-    <span id="matchPill" class="match-pill"></span>
     <button class="tb-btn primary" id="exportBtn" disabled>Export STEP</button>
     <span id="statusBar"></span>
   </div>
@@ -159,7 +137,6 @@ body { font-family:'Segoe UI',system-ui,sans-serif; background:#1a1a2e; color:#e
     <div class="tab-bar">
       <div class="tab-btn active" data-tab="groups">Groups</div>
       <div class="tab-btn" data-tab="original">Original Tree</div>
-      <div class="tab-btn" data-tab="poses">Poses</div>
     </div>
     <div id="addGroupBar">
       <input type="text" id="newGroupName" placeholder="New group name…">
@@ -167,7 +144,6 @@ body { font-family:'Segoe UI',system-ui,sans-serif; background:#1a1a2e; color:#e
     </div>
     <div id="groupsTab"   class="tab-content active"><div id="groupTree"></div></div>
     <div id="originalTab" class="tab-content"><div id="origTree"></div></div>
-    <div id="posesTab"    class="tab-content"><div id="poseList"></div></div>
   </div>
 
   <!-- 3-D Viewer -->
@@ -189,8 +165,6 @@ body { font-family:'Segoe UI',system-ui,sans-serif; background:#1a1a2e; color:#e
 
     <div id="viewer-btns">
       <button id="fitBtn"  title="Fit all">⤢</button>
-      <button id="fitMatchesBtn" title="Fit matches">M</button>
-      <button id="axisBtn" title="Toggle XYZ axes on matched components">XYZ</button>
       <button id="clearSelBtn" title="Clear selection">✕</button>
     </div>
     <div id="view-label">Scroll=zoom · Drag=orbit · Right-drag=pan</div>
@@ -228,14 +202,11 @@ const state = {
   translations: {},
   counts: {},
   filename: null,
-  matches: null,
 };
 
 let selectedName = null;
 let hoveredName  = null;
 let draggedComp  = null;
-let matchedNames = new Set();
-let matchedCounts = {};
 
 // ─────────────────────────────────────────────────────────────
 // Helpers
@@ -248,88 +219,6 @@ function esc(s) {
 function status(msg) { $('#statusBar').textContent = msg; }
 function showOverlay(msg) { $('#overlayText').textContent = msg; $('#overlay').classList.remove('hidden'); }
 function hideOverlay()    { $('#overlay').classList.add('hidden'); }
-
-function setMatches(matches) {
-  state.matches = matches || null;
-  matchedNames = new Set();
-  matchedCounts = {};
-
-  for (const rec of ((matches && matches.matches) || [])) {
-    const names = [rec.product_name, rec.occurrence_name].filter(Boolean);
-    for (const name of names) {
-      matchedNames.add(name);
-      matchedCounts[name] = (matchedCounts[name] || 0) + 1;
-    }
-  }
-
-  // Assembly nodes have no direct geometry — propagate match status to all
-  // descendant leaf nodes so their meshes get highlighted in the 3-D view.
-  if (state.tree && matchedNames.size > 0) {
-    const directlyMatched = new Set(matchedNames);
-    function addSubtree(node) {
-      matchedNames.add(node.name);
-      for (const c of (node.children || [])) addSubtree(c);
-    }
-    function walkForMatches(node) {
-      if (directlyMatched.has(node.name)) addSubtree(node);
-      else for (const c of (node.children || [])) walkForMatches(c);
-    }
-    walkForMatches(state.tree);
-  }
-
-  const count = (matches && matches.matched_instance_count) || ((matches && matches.matches || []).length);
-  const pill = $('#matchPill');
-  if (count > 0) {
-    pill.textContent = `${count} matches`;
-    pill.title = 'Matched components are highlighted in green';
-    pill.classList.add('show');
-  } else {
-    pill.textContent = '';
-    pill.title = '';
-    pill.classList.remove('show');
-  }
-  renderPosePanel();
-}
-
-function fmtVec(v, digits=2) {
-  if (!v || !Array.isArray(v)) return '—';
-  return v.map(x => (x === null || x === undefined) ? '—' : x.toFixed(digits)).join(', ');
-}
-
-function renderPosePanel() {
-  const el = $('#poseList');
-  if (!el) return;
-  const m = state.matches;
-  const records = (m && m.matches) || [];
-  if (!records.length) {
-    el.innerHTML = '<div class="pose-empty">No matches — load a STEP file and matches JSON.</div>';
-    return;
-  }
-  const ref = (m && m.component_anchor_frame) || null;
-  const refHtml = ref ? `
-    <div class="pose-ref">
-      <div class="pose-ref-title">Component anchor (reference)</div>
-      <div class="pose-line"><span class="pose-key">origin</span><span class="pose-val">${fmtVec(ref.origin, 3)}</span></div>
-      <div class="pose-line"><span class="pose-key">z axis</span><span class="pose-val">${fmtVec(ref.z_axis, 3)}</span></div>
-      <div class="pose-line"><span class="pose-key">x axis</span><span class="pose-val">${fmtVec(ref.x_axis, 3)}</span></div>
-      <div class="pose-line"><span class="pose-key">radius</span><span class="pose-val">${ref.radius != null ? ref.radius.toFixed(3) : '—'} mm (${ref.anchor_kind || '?'})</span></div>
-    </div>` : '';
-  const rows = records.map((r, i) => {
-    const xyz = r.pose_xyz, rpy = r.pose_rpy_deg, ank = r.anchor_origin_scene;
-    return `
-      <div class="pose-row" data-idx="${i}">
-        <div class="pose-head"><b>${r.nauo_id}</b> <span class="pose-sub">${r.product_name || ''}</span></div>
-        <div class="pose-line"><span class="pose-key">xyz</span><span class="pose-val">${fmtVec(xyz, 2)}</span></div>
-        <div class="pose-line"><span class="pose-key">rpy°</span><span class="pose-val">${fmtVec(rpy, 2)}</span></div>
-        <div class="pose-line"><span class="pose-key">anchor</span><span class="pose-val">${fmtVec(ank, 2)}</span></div>
-      </div>`;
-  }).join('');
-  el.innerHTML = refHtml + rows;
-}
-
-function isMatchedName(name) {
-  return matchedNames.has(name);
-}
 
 // ─────────────────────────────────────────────────────────────
 // Three.js scene
@@ -385,56 +274,8 @@ function fitAll() {
   scene.traverse(o => { if (o.isMesh) box.expandByObject(o); });
   fitCameraToBox(box);
 }
-function fitMatches() {
-  const box = new THREE.Box3();
-  for (const m of allMeshes) {
-    if (isMatchedName(m.userData.componentName)) box.expandByObject(m);
-  }
-  if (!box.isEmpty()) fitCameraToBox(box);
-}
-
-function placeMatchAxes() {
-  if (axisGroup) { scene.remove(axisGroup); axisGroup = null; }
-  const records = (state.matches && state.matches.matches) || [];
-  if (!records.length) return;
-
-  const box = new THREE.Box3();
-  for (const m of allMeshes) box.expandByObject(m);
-  const size = box.getSize(new THREE.Vector3());
-  const axisSize = Math.max(size.x, size.y, size.z) * 0.06 || 100;
-
-  axisGroup = new THREE.Group();
-  for (const rec of records) {
-    // Prefer the resolved anchor origin in scene coords; orient by rotation_matrix.
-    const c = rec.anchor_origin_scene || rec.pose_xyz
-           || rec.geometry_bottom_center || rec.geometry_center;
-    if (!c || c.some(v => v === null)) continue;
-    const axes = new THREE.AxesHelper(axisSize);
-    axes.position.set(c[0], c[1], c[2]);
-    const R = rec.rotation_matrix;
-    if (R && R.length === 3) {
-      const m = new THREE.Matrix4();
-      m.set(
-        R[0][0], R[0][1], R[0][2], 0,
-        R[1][0], R[1][1], R[1][2], 0,
-        R[2][0], R[2][1], R[2][2], 0,
-        0, 0, 0, 1,
-      );
-      axes.quaternion.setFromRotationMatrix(m);
-    }
-    axisGroup.add(axes);
-  }
-  axisGroup.visible = axisVisible;
-  scene.add(axisGroup);
-}
 
 $('#fitBtn').addEventListener('click', fitAll);
-$('#fitMatchesBtn').addEventListener('click', fitMatches);
-$('#axisBtn').addEventListener('click', () => {
-  axisVisible = !axisVisible;
-  if (axisGroup) axisGroup.visible = axisVisible;
-  $('#axisBtn').classList.toggle('active', axisVisible);
-});
 $('#clearSelBtn').addEventListener('click', () => selectComponent(null));
 
 // ─────────────────────────────────────────────────────────────
@@ -443,8 +284,6 @@ $('#clearSelBtn').addEventListener('click', () => selectComponent(null));
 let allMeshes   = [];
 let nameToMeshes = {}; // componentName -> THREE.Mesh[]
 let groupColors  = {}; // groupName -> THREE.Color hex int
-let axisGroup    = null;
-let axisVisible  = false;
 
 const PALETTE = [
   0x4db8ff, 0x57cc99, 0xffd166, 0xe94560, 0xa78bfa,
@@ -453,7 +292,6 @@ const PALETTE = [
 const COL_DEFAULT  = 0x4a6a8a;
 const COL_SELECTED = 0xffe060;
 const COL_OTHER    = 0x556677;
-const COL_MATCH    = 0x39e58c;
 
 function assignGroupColors(groups) {
   groupColors = {};
@@ -474,10 +312,10 @@ function getGroupOfComp(name) {
 function applyColors() {
   for (const m of allMeshes) {
     const g = getGroupOfComp(m.userData.componentName);
-    const col = isMatchedName(m.userData.componentName) ? COL_MATCH : (groupColors[g] ?? COL_DEFAULT);
+    const col = groupColors[g] ?? COL_DEFAULT;
     m.material.color.setHex(col);
     m.material.opacity = 1; m.material.transparent = false;
-    m.material.emissive.setHex(isMatchedName(m.userData.componentName) ? 0x06331d : 0);
+    m.material.emissive.setHex(0);
   }
 }
 
@@ -667,10 +505,7 @@ async function buildMeshesFromStep(fileBuffer) {
         } else {
           fitAll();
           applyColors();
-          placeMatchAxes();
-          const matchCount = state.matches ? (state.matches.matched_instance_count || (state.matches.matches || []).length) : 0;
-          status(matchCount > 0 ? `3-D ready — ${allMeshes.length} meshes, ${matchCount} matches highlighted` : `3-D ready — ${allMeshes.length} meshes`);
-          if (matchCount > 0) fitMatches();
+          status(`3-D ready — ${allMeshes.length} meshes`);
         }
         resolve();
       }
@@ -711,8 +546,6 @@ renderer.domElement.addEventListener('pointermove', e => {
     const eng   = state.translations[name] || '';
     const grp   = getGroupOfComp(name);
     const cnt   = state.counts[name] || 1;
-    const matched = isMatchedName(name);
-    const matchCount = matchedCounts[name] || 0;
     tooltip.style.display = 'block';
     tooltip.style.left = (e.clientX - rect.left + 14) + 'px';
     tooltip.style.top  = (e.clientY - rect.top  - 10) + 'px';
@@ -720,8 +553,7 @@ renderer.domElement.addEventListener('pointermove', e => {
       `<div class="tt-name">${esc(name)}</div>` +
       (eng  ? `<div class="tt-eng">${esc(eng)}</div>`  : '') +
       (grp  ? `<div class="tt-group">Group: ${esc(grp)}</div>` : '') +
-      (cnt>1 ? `<div class="tt-count">×${cnt} instances</div>` : '') +
-      (matched ? `<div class="tt-match">${matchCount || 1} matched instance${(matchCount || 1) === 1 ? '' : 's'}</div>` : '');
+      (cnt>1 ? `<div class="tt-count">×${cnt} instances</div>` : '');
 
     // Hover highlight when nothing selected
     if (!selectedName && name !== hoveredName) {
@@ -804,7 +636,6 @@ $('#fileInput').addEventListener('change', async e => {
   state.filename     = uploadData.filename;
   state.counts       = {};
   state.groups       = null;
-  setMatches(null);
   selectedName       = null;
 
   walkTree(uploadData.tree, n => { if (n.name !== 'root') state.counts[n.name] = n.count; });
@@ -869,17 +700,15 @@ function renderOrigTree(tree) {
 
 function buildOrigNode(node) {
   const div = document.createElement('div');
-  div.className = 'orig-node' + (isMatchedName(node.name) ? ' matched' : '');
+  div.className = 'orig-node';
   const hasKids = node.children && node.children.length > 0;
   const eng   = state.translations[node.name] || '';
   const count = node.count > 1 ? ` ×${node.count}` : '';
-  const matchCount = matchedCounts[node.name] || 0;
 
   div.innerHTML =
     (hasKids ? `<span class="orig-toggle" data-x="1">▾</span>` : `<span style="display:inline-block;width:14px"></span>`) +
     `<span class="orig-name">${esc(node.name)}</span>` +
     (count ? `<span class="orig-count">${count}</span>` : '') +
-    (matchCount ? `<span class="orig-match">match ×${matchCount}</span>` : '') +
     (eng   ? `<span class="orig-eng">${esc(eng)}</span>` : '');
 
   if (hasKids) {
@@ -1030,19 +859,16 @@ function buildCompEl(name) {
   const div = document.createElement('div');
   div.className =
     'comp-node' +
-    (isMatchedName(name) ? ' matched' : '') +
     (name === selectedName ? ' selected' : '');
   div.dataset.comp = name;
   div.draggable = true;
 
   const eng   = state.translations[name] || '';
   const count = state.counts[name] || 1;
-  const matchCount = matchedCounts[name] || 0;
 
   div.innerHTML =
     `<span class="c-name" title="${esc(name)}">${esc(name)}</span>` +
     (eng    ? `<span class="c-eng" title="${esc(eng)}">${esc(eng)}</span>` : '') +
-    (matchCount ? `<span class="c-match" title="Matched instances">M×${matchCount}</span>` : '') +
     (count>1 ? `<span class="c-count">×${count}</span>` : '') +
     `<button class="c-del" title="Remove">✕</button>`;
 
@@ -1147,7 +973,6 @@ $('#exportBtn').addEventListener('click', async () => {
     state.counts       = data.component_counts || {};
     state.filename     = data.filename;
     state.groups       = data.groups;
-    setMatches(data.matches || null);
 
     $('#filename').textContent  = data.filename;
     $('#viewer-hint').style.display = 'none';
