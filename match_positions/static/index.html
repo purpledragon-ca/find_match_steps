@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>STEP Match Viewer</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'Segoe UI',system-ui,sans-serif; background:#1a1a2e; color:#e0e0e0; height:100vh; overflow:hidden; }
+
+/* ── Layout ─────────────────────────────────────────────── */
+#app { display:grid; grid-template-rows:48px 1fr; grid-template-columns:360px 1fr; height:100vh; }
+#toolbar { grid-column:1/-1; background:#16213e; border-bottom:1px solid #0f3460; display:flex; align-items:center; padding:0 14px; gap:9px; }
+#sidebar { overflow:hidden; display:flex; flex-direction:column; background:#1a1a2e; border-right:1px solid #0f3460; }
+#viewer  { position:relative; overflow:hidden; background:#0a0a16; }
+
+/* ── Toolbar ─────────────────────────────────────────────── */
+#toolbar h1 { font-size:14px; font-weight:700; color:#39e58c; margin-right:auto; white-space:nowrap; letter-spacing:.3px; }
+#filename { font-size:11px; color:#8888aa; max-width:230px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#statusBar { font-size:11px; color:#6688aa; white-space:nowrap; max-width:260px; overflow:hidden; text-overflow:ellipsis; }
+.match-pill { font-size:11px; padding:3px 9px; border-radius:10px; white-space:nowrap; flex-shrink:0; background:#082419; color:#39e58c; border:1px solid #17633f; }
+
+/* ── Pose panel ──────────────────────────────────────────── */
+#poseList { flex:1; overflow-y:auto; padding:8px 10px; font-size:12px; font-family:'SF Mono','Consolas',monospace; min-height:0; }
+.pose-empty { color:#667; padding:12px 4px; font-style:italic; font-family:'Segoe UI',system-ui,sans-serif; }
+.pose-ref { background:#162033; border:1px solid #0f3460; border-radius:5px; padding:7px 9px; margin-bottom:10px; }
+.pose-ref-title { font-size:11px; color:#39e58c; font-weight:700; margin-bottom:4px; letter-spacing:.3px; text-transform:uppercase; font-family:'Segoe UI',system-ui,sans-serif; }
+.pose-row { background:#121a2a; border:1px solid #243052; border-radius:5px; padding:6px 9px; margin-bottom:6px; cursor:pointer; }
+.pose-row:hover { border-color:#533483; }
+.pose-row.selected { border-color:#ffe060; background:#1a1f14; }
+.pose-head { font-size:12px; margin-bottom:3px; color:#39e58c; font-family:'Segoe UI',system-ui,sans-serif; }
+.pose-sub  { color:#88a; font-weight:normal; margin-left:6px; }
+.pose-line { display:flex; gap:8px; font-size:11.5px; color:#bcd; padding:1px 0; }
+.pose-key  { color:#8aa; min-width:56px; }
+.pose-val  { color:#dde; }
+
+/* ── 3-D viewer ──────────────────────────────────────────── */
+#three-canvas { position:absolute; inset:0; width:100%!important; height:100%!important; display:block; }
+#viewer-hint { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none; z-index:2; }
+.hint-card { background:rgba(22,33,62,.9); border:1px solid #0f3460; border-radius:10px; padding:28px 32px; max-width:320px; text-align:center; pointer-events:auto; }
+.hint-card h2 { color:#39e58c; font-size:15px; margin-bottom:10px; }
+.hint-card p  { color:#888; font-size:12.5px; line-height:1.65; }
+
+/* ── Tooltip ─────────────────────────────────────────────── */
+#tooltip { position:absolute; background:#16213e; border:1px solid #2a3a5a; border-radius:7px; padding:8px 12px; font-size:12px; pointer-events:none; z-index:30; max-width:230px; display:none; box-shadow:0 4px 16px rgba(0,0,0,.5); }
+#tooltip .tt-name { font-weight:600; word-break:break-all; }
+#tooltip .tt-match { color:#39e58c; font-size:11px; margin-top:2px; }
+
+/* ── Viewer controls ─────────────────────────────────────── */
+#viewer-btns { position:absolute; top:10px; right:10px; display:flex; flex-direction:column; gap:4px; z-index:10; }
+#viewer-btns button { background:rgba(22,33,62,.85); border:1px solid #2a3a5a; color:#aaa; width:28px; height:28px; border-radius:5px; cursor:pointer; font-size:13px; display:flex; align-items:center; justify-content:center; }
+#viewer-btns button:hover { background:#0f3460; color:#e0e0e0; }
+#viewer-btns button.active { background:#0f3460; color:#39e58c; border-color:#39e58c; }
+#view-label { position:absolute; bottom:10px; left:10px; font-size:11px; color:#444; z-index:10; user-select:none; }
+
+/* ── Loading overlay ─────────────────────────────────────── */
+#overlay { position:absolute; inset:0; background:rgba(8,8,18,.88); display:flex; align-items:center; justify-content:center; z-index:50; transition:opacity .2s; }
+#overlay.hidden { display:none; }
+.ov-box { text-align:center; }
+.spinner { width:34px; height:34px; border:3px solid #1a2a3a; border-top-color:#39e58c; border-radius:50%; animation:spin .75s linear infinite; margin:0 auto 12px; }
+@keyframes spin { to { transform:rotate(360deg); } }
+.ov-text { font-size:12.5px; color:#888; }
+
+/* ── Misc ────────────────────────────────────────────────── */
+::-webkit-scrollbar { width:4px; height:4px; }
+::-webkit-scrollbar-track { background:transparent; }
+::-webkit-scrollbar-thumb { background:#2a2a3a; border-radius:2px; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- Toolbar -->
+  <div id="toolbar">
+    <h1>⬡ STEP Match Viewer</h1>
+    <span id="filename"></span>
+    <span id="matchPill" class="match-pill">0 matches</span>
+    <span id="statusBar"></span>
+  </div>
+
+  <!-- Sidebar -->
+  <div id="sidebar">
+    <div id="poseList"><div class="pose-empty">Loading matches…</div></div>
+  </div>
+
+  <!-- 3-D Viewer -->
+  <div id="viewer">
+    <canvas id="three-canvas"></canvas>
+
+    <div id="viewer-hint">
+      <div class="hint-card">
+        <h2>STEP Match Viewer</h2>
+        <p>Launch from <code>match_step_component_positions.py --launch-ui</code> to pre-load a STEP file and matches JSON. Matched instances are highlighted in green.</p>
+      </div>
+    </div>
+
+    <div id="tooltip"></div>
+
+    <div id="viewer-btns">
+      <button id="fitBtn"  title="Fit all">⤢</button>
+      <button id="fitMatchesBtn" title="Fit matches">M</button>
+      <button id="axisBtn" class="active" title="Toggle XYZ axes on matched components">XYZ</button>
+      <button id="clearSelBtn" title="Clear selection">✕</button>
+    </div>
+    <div id="view-label">Scroll=zoom · Drag=orbit · Right-drag=pan</div>
+
+    <div id="overlay" class="hidden">
+      <div class="ov-box">
+        <div class="spinner"></div>
+        <div class="ov-text" id="overlayText">Loading…</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Three.js via importmap -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ─────────────────────────────────────────────────────────────
+// State
+// ─────────────────────────────────────────────────────────────
+const state = {
+  filename: null,
+  matches: null,
+};
+
+let selectedName = null;
+let selectedMatchIdx = null;
+let hoveredName  = null;
+let matchedNames = new Set();
+let matchedCounts = {};
+
+// ─────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+function esc(s) {
+  return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function status(msg) { $('#statusBar').textContent = msg; }
+function showOverlay(msg) { $('#overlayText').textContent = msg; $('#overlay').classList.remove('hidden'); }
+function hideOverlay()    { $('#overlay').classList.add('hidden'); }
+
+function fmtVec(v, digits=2) {
+  if (!v || !Array.isArray(v)) return '—';
+  return v.map(x => (x === null || x === undefined) ? '—' : x.toFixed(digits)).join(', ');
+}
+
+function setMatches(matches) {
+  state.matches = matches || null;
+  matchedNames = new Set();
+  matchedCounts = {};
+
+  for (const rec of ((matches && matches.matches) || [])) {
+    // Direct match names (assembly / occurrence) go in matchedCounts so
+    // tooltips show an instance count; descendant leaf names also go into
+    // matchedNames so occt-tessellated meshes (which use leaf names) colour.
+    const direct = [rec.product_name, rec.occurrence_name].filter(Boolean);
+    for (const name of direct) {
+      matchedNames.add(name);
+      matchedCounts[name] = (matchedCounts[name] || 0) + 1;
+    }
+    for (const name of (rec.descendant_names || [])) {
+      matchedNames.add(name);
+    }
+  }
+
+  const count = (matches && matches.matched_instance_count) || ((matches && matches.matches || []).length);
+  $('#matchPill').textContent = `${count} match${count === 1 ? '' : 'es'}`;
+  renderPosePanel();
+}
+
+function isMatchedName(name) {
+  return matchedNames.has(name);
+}
+
+function renderPosePanel() {
+  const el = $('#poseList');
+  const m = state.matches;
+  const records = (m && m.matches) || [];
+  if (!records.length) {
+    el.innerHTML = '<div class="pose-empty">No matches loaded.</div>';
+    return;
+  }
+  const ref = (m && m.component_anchor_frame) || null;
+  const refHtml = ref ? `
+    <div class="pose-ref">
+      <div class="pose-ref-title">Component anchor (reference)</div>
+      <div class="pose-line"><span class="pose-key">origin</span><span class="pose-val">${fmtVec(ref.origin, 3)}</span></div>
+      <div class="pose-line"><span class="pose-key">z axis</span><span class="pose-val">${fmtVec(ref.z_axis, 3)}</span></div>
+      <div class="pose-line"><span class="pose-key">x axis</span><span class="pose-val">${fmtVec(ref.x_axis, 3)}</span></div>
+      <div class="pose-line"><span class="pose-key">radius</span><span class="pose-val">${ref.radius != null ? ref.radius.toFixed(3) : '—'} mm (${ref.anchor_kind || '?'})</span></div>
+    </div>` : '';
+  const rows = records.map((r, i) => {
+    const xyz = r.pose_xyz, rpy = r.pose_rpy_deg, ank = r.anchor_origin_scene;
+    return `
+      <div class="pose-row${i === selectedMatchIdx ? ' selected' : ''}" data-idx="${i}">
+        <div class="pose-head"><b>${esc(r.nauo_id || '')}</b> <span class="pose-sub">${esc(r.product_name || '')}</span></div>
+        <div class="pose-line"><span class="pose-key">xyz</span><span class="pose-val">${fmtVec(xyz, 2)}</span></div>
+        <div class="pose-line"><span class="pose-key">rpy°</span><span class="pose-val">${fmtVec(rpy, 2)}</span></div>
+        <div class="pose-line"><span class="pose-key">anchor</span><span class="pose-val">${fmtVec(ank, 2)}</span></div>
+      </div>`;
+  }).join('');
+  el.innerHTML = refHtml + rows;
+
+  for (const row of el.querySelectorAll('.pose-row')) {
+    row.addEventListener('click', () => {
+      const idx = +row.dataset.idx;
+      const rec = records[idx];
+      selectedMatchIdx = idx;
+      renderPosePanel();
+      const name = rec.occurrence_name || rec.product_name;
+      if (name) selectComponent(name);
+    });
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Three.js scene
+// ─────────────────────────────────────────────────────────────
+const canvas   = $('#three-canvas');
+const viewerEl = $('#viewer');
+
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a0a16);
+
+const camera = new THREE.PerspectiveCamera(45, 1, 0.01, 1e7);
+camera.position.set(0, 0, 500);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.07;
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+const dl1 = new THREE.DirectionalLight(0xffffff, 0.9); dl1.position.set(1,2,3);   scene.add(dl1);
+const dl2 = new THREE.DirectionalLight(0x8899ff, 0.3); dl2.position.set(-1,-1,-1); scene.add(dl2);
+
+new ResizeObserver(() => {
+  const w = viewerEl.clientWidth, h = viewerEl.clientHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}).observe(viewerEl);
+
+(function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  renderer.render(scene, camera);
+})();
+
+function fitCameraToBox(box) {
+  if (!box || box.isEmpty()) return;
+  const center = box.getCenter(new THREE.Vector3());
+  const size   = box.getSize(new THREE.Vector3());
+  const maxDim = Math.max(size.x, size.y, size.z) || 1;
+  const fov    = camera.fov * (Math.PI / 180);
+  const dist   = (maxDim / (2 * Math.tan(fov / 2))) * 1.6;
+  controls.target.copy(center);
+  camera.position.set(center.x + dist * 0.4, center.y + dist * 0.3, center.z + dist);
+  camera.near = dist / 1000; camera.far = dist * 1000;
+  camera.updateProjectionMatrix();
+  controls.update();
+}
+function fitAll() {
+  const box = new THREE.Box3();
+  scene.traverse(o => { if (o.isMesh) box.expandByObject(o); });
+  fitCameraToBox(box);
+}
+function fitMatches() {
+  const box = new THREE.Box3();
+  for (const m of allMeshes) {
+    if (isMatchedName(m.userData.componentName)) box.expandByObject(m);
+  }
+  if (!box.isEmpty()) fitCameraToBox(box);
+}
+
+function placeMatchAxes() {
+  if (axisGroup) { scene.remove(axisGroup); axisGroup = null; }
+  const records = (state.matches && state.matches.matches) || [];
+  if (!records.length) return;
+
+  const box = new THREE.Box3();
+  for (const m of allMeshes) box.expandByObject(m);
+  const size = box.getSize(new THREE.Vector3());
+  const axisSize = Math.max(size.x, size.y, size.z) * 0.06 || 100;
+
+  axisGroup = new THREE.Group();
+  for (const rec of records) {
+    const c = rec.anchor_origin_scene || rec.pose_xyz
+           || rec.geometry_bottom_center || rec.geometry_center;
+    if (!c || c.some(v => v === null)) continue;
+    const axes = new THREE.AxesHelper(axisSize);
+    axes.position.set(c[0], c[1], c[2]);
+    const R = rec.rotation_matrix;
+    if (R && R.length === 3) {
+      const m = new THREE.Matrix4();
+      m.set(
+        R[0][0], R[0][1], R[0][2], 0,
+        R[1][0], R[1][1], R[1][2], 0,
+        R[2][0], R[2][1], R[2][2], 0,
+        0, 0, 0, 1,
+      );
+      axes.quaternion.setFromRotationMatrix(m);
+    }
+    axisGroup.add(axes);
+  }
+  axisGroup.visible = axisVisible;
+  scene.add(axisGroup);
+}
+
+$('#fitBtn').addEventListener('click', fitAll);
+$('#fitMatchesBtn').addEventListener('click', fitMatches);
+$('#axisBtn').addEventListener('click', () => {
+  axisVisible = !axisVisible;
+  if (axisGroup) axisGroup.visible = axisVisible;
+  $('#axisBtn').classList.toggle('active', axisVisible);
+});
+$('#clearSelBtn').addEventListener('click', () => {
+  selectedMatchIdx = null;
+  selectComponent(null);
+  renderPosePanel();
+});
+
+// ─────────────────────────────────────────────────────────────
+// Mesh registry & colors
+// ─────────────────────────────────────────────────────────────
+let allMeshes    = [];
+let nameToMeshes = {};
+let axisGroup    = null;
+let axisVisible  = true;
+
+const COL_DEFAULT  = 0x4a6a8a;
+const COL_SELECTED = 0xffe060;
+const COL_MATCH    = 0x39e58c;
+
+function applyColors() {
+  for (const m of allMeshes) {
+    const name = m.userData.componentName;
+    const col = isMatchedName(name) ? COL_MATCH : COL_DEFAULT;
+    m.material.color.setHex(col);
+    m.material.opacity = 1; m.material.transparent = false;
+    m.material.emissive.setHex(isMatchedName(name) ? 0x06331d : 0);
+  }
+}
+
+function selectComponent(name, focusCamera = true) {
+  selectedName = name;
+
+  if (!name) {
+    applyColors();
+    return;
+  }
+
+  for (const m of allMeshes) {
+    if (m.userData.componentName === name) {
+      m.material.color.setHex(COL_SELECTED);
+      m.material.emissive.setHex(0x332200);
+      m.material.opacity = 1; m.material.transparent = false;
+    } else {
+      m.material.opacity = 0.13; m.material.transparent = true;
+      m.material.emissive.setHex(0);
+    }
+  }
+
+  if (focusCamera) {
+    const box = new THREE.Box3();
+    for (const m of (nameToMeshes[name] || [])) box.expandByObject(m);
+    if (!box.isEmpty()) fitCameraToBox(box);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// occt-import-js in a Web Worker
+// ─────────────────────────────────────────────────────────────
+const WORKER_SRC = /* js */`
+const CDN = 'https://cdn.jsdelivr.net/npm/occt-import-js@0.0.22/dist/';
+importScripts(CDN + 'occt-import-js.js');
+
+let occt = null;
+
+(async () => {
+  try {
+    const factory = self.occtimportjs;
+    if (typeof factory !== 'function')
+      throw new Error('occtimportjs global not found after importScripts');
+    occt = await factory({ locateFile: p => CDN + p });
+    self.postMessage({ type: 'ready' });
+  } catch (e) {
+    self.postMessage({ type: 'init_error', msg: String(e) });
+  }
+})();
+
+self.onmessage = async ({ data }) => {
+  if (!occt) { self.postMessage({ type: 'error', msg: 'occt not initialised' }); return; }
+
+  self.postMessage({ type: 'progress', msg: 'Tessellating 3-D geometry…' });
+
+  let result;
+  try {
+    result = occt.ReadStepFile(new Uint8Array(data.buffer), null);
+  } catch (e) {
+    self.postMessage({ type: 'error', msg: String(e) });
+    return;
+  }
+
+  if (!result || !result.success) {
+    self.postMessage({ type: 'error', msg: 'ReadStepFile failed' });
+    return;
+  }
+
+  self.postMessage({ type: 'progress', msg: 'Packaging mesh data…' });
+
+  const out = [];
+  for (const m of (result.meshes || [])) {
+    const posArr = m.attributes && m.attributes.position && m.attributes.position.array;
+    const idxArr = m.index && m.index.array;
+    if (!posArr || !posArr.length || !idxArr || !idxArr.length) continue;
+
+    const v = new Float32Array(posArr);
+    const i = new Uint32Array(idxArr);
+    const normArr = m.attributes && m.attributes.normal && m.attributes.normal.array;
+    const n = (normArr && normArr.length) ? new Float32Array(normArr) : null;
+
+    out.push({ name: m.name || '', v, n, i });
+  }
+
+  const transferable = out.flatMap(m => m.n ? [m.v.buffer, m.i.buffer, m.n.buffer] : [m.v.buffer, m.i.buffer]);
+  self.postMessage({ type: 'done', meshes: out }, transferable);
+};
+`;
+
+let _worker      = null;
+let _workerReady = null;
+
+function ensureWorker() {
+  if (_worker) return { worker: _worker, ready: _workerReady };
+  const blob = new Blob([WORKER_SRC], { type: 'application/javascript' });
+  _worker = new Worker(URL.createObjectURL(blob));
+  _workerReady = new Promise((resolve, reject) => {
+    const h = ({ data }) => {
+      if (data.type === 'ready')      { _worker.removeEventListener('message', h); resolve(); }
+      if (data.type === 'init_error') { _worker.removeEventListener('message', h); reject(new Error(data.msg)); }
+    };
+    _worker.addEventListener('message', h);
+    _worker.addEventListener('error', e => reject(e), { once: true });
+  });
+  return { worker: _worker, ready: _workerReady };
+}
+ensureWorker();
+
+async function buildMeshesFromStep(fileBuffer) {
+  for (const m of allMeshes) { scene.remove(m); m.geometry.dispose(); }
+  allMeshes = []; nameToMeshes = {};
+
+  showOverlay('Loading 3-D engine…');
+
+  let worker;
+  try {
+    const w = ensureWorker();
+    worker = w.worker;
+    await w.ready;
+  } catch (e) {
+    hideOverlay();
+    status('3-D engine failed to load: ' + e.message);
+    return;
+  }
+
+  showOverlay('Tessellating 3-D geometry…');
+
+  await new Promise((resolve) => {
+    const handler = ({ data }) => {
+      if (data.type === 'progress') { showOverlay(data.msg); return; }
+      worker.removeEventListener('message', handler);
+      if (data.type === 'error') {
+        hideOverlay();
+        status('3-D error: ' + data.msg);
+        resolve(); return;
+      }
+      if (data.type === 'done') {
+        for (const meshData of data.meshes) {
+          const geo = new THREE.BufferGeometry();
+          geo.setAttribute('position', new THREE.BufferAttribute(meshData.v, 3));
+          if (meshData.n) geo.setAttribute('normal', new THREE.BufferAttribute(meshData.n, 3));
+          geo.setIndex(new THREE.BufferAttribute(meshData.i, 1));
+          if (!meshData.n) geo.computeVertexNormals();
+          const mat  = new THREE.MeshPhongMaterial({ color: COL_DEFAULT, specular: 0x111122, shininess: 40 });
+          const mesh = new THREE.Mesh(geo, mat);
+          mesh.userData.componentName = meshData.name;
+          scene.add(mesh);
+          allMeshes.push(mesh);
+          if (!nameToMeshes[meshData.name]) nameToMeshes[meshData.name] = [];
+          nameToMeshes[meshData.name].push(mesh);
+        }
+        hideOverlay();
+        if (allMeshes.length === 0) {
+          status('No renderable geometry in STEP file');
+        } else {
+          fitAll();
+          applyColors();
+          placeMatchAxes();
+          const matchCount = state.matches ? (state.matches.matched_instance_count || (state.matches.matches || []).length) : 0;
+          status(matchCount > 0 ? `3-D ready — ${allMeshes.length} meshes, ${matchCount} matches highlighted` : `3-D ready — ${allMeshes.length} meshes`);
+          if (matchCount > 0) fitMatches();
+        }
+        resolve();
+      }
+    };
+    worker.addEventListener('message', handler);
+    worker.onerror = (e) => {
+      worker.removeEventListener('message', handler);
+      hideOverlay();
+      status('Worker crashed: ' + e.message);
+      _worker = null; _workerReady = null;
+      resolve();
+    };
+    worker.postMessage({ buffer: fileBuffer }, [fileBuffer]);
+  });
+}
+
+// ─────────────────────────────────────────────────────────────
+// 3-D mouse interaction
+// ─────────────────────────────────────────────────────────────
+const raycaster = new THREE.Raycaster();
+const mouse     = new THREE.Vector2();
+const tooltip   = $('#tooltip');
+let lastClickTime = 0;
+
+renderer.domElement.addEventListener('pointermove', e => {
+  if (allMeshes.length === 0) return;
+  const rect = renderer.domElement.getBoundingClientRect();
+  mouse.x = ((e.clientX - rect.left)  / rect.width)  * 2 - 1;
+  mouse.y = -((e.clientY - rect.top)  / rect.height) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+  const hits = raycaster.intersectObjects(allMeshes);
+
+  if (hits.length > 0) {
+    const name  = hits[0].object.userData.componentName;
+    const matched = isMatchedName(name);
+    const matchCount = matchedCounts[name] || 0;
+    tooltip.style.display = 'block';
+    tooltip.style.left = (e.clientX - rect.left + 14) + 'px';
+    tooltip.style.top  = (e.clientY - rect.top  - 10) + 'px';
+    tooltip.innerHTML =
+      `<div class="tt-name">${esc(name)}</div>` +
+      (matched ? `<div class="tt-match">${matchCount || 1} matched instance${(matchCount || 1) === 1 ? '' : 's'}</div>` : '');
+
+    if (!selectedName && name !== hoveredName) {
+      if (hoveredName) for (const m of (nameToMeshes[hoveredName]||[])) m.material.emissive.setHex(isMatchedName(hoveredName) ? 0x06331d : 0);
+      hoveredName = name;
+      for (const m of (nameToMeshes[name]||[])) m.material.emissive.setHex(0x112233);
+    }
+    renderer.domElement.style.cursor = 'pointer';
+  } else {
+    tooltip.style.display = 'none';
+    if (hoveredName && !selectedName) {
+      for (const m of (nameToMeshes[hoveredName]||[])) m.material.emissive.setHex(isMatchedName(hoveredName) ? 0x06331d : 0);
+      hoveredName = null;
+    }
+    renderer.domElement.style.cursor = '';
+  }
+});
+
+renderer.domElement.addEventListener('pointerleave', () => {
+  tooltip.style.display = 'none';
+});
+
+renderer.domElement.addEventListener('click', e => {
+  const now = Date.now();
+  if (now - lastClickTime < 200) return;
+  lastClickTime = now;
+
+  if (allMeshes.length === 0) return;
+  const rect = renderer.domElement.getBoundingClientRect();
+  mouse.x = ((e.clientX - rect.left) / rect.width)  * 2 - 1;
+  mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+  const hits = raycaster.intersectObjects(allMeshes);
+  if (hits.length > 0) {
+    const name = hits[0].object.userData.componentName;
+    if (name === selectedName) {
+      selectedMatchIdx = null;
+      selectComponent(null);
+      renderPosePanel();
+    } else {
+      selectComponent(name, false);
+    }
+  } else {
+    selectedMatchIdx = null;
+    selectComponent(null);
+    renderPosePanel();
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// Load pre-populated session on startup
+// ─────────────────────────────────────────────────────────────
+(async () => {
+  try {
+    const data = await (await fetch('/api/session')).json();
+    if (!data.loaded) {
+      $('#poseList').innerHTML = '<div class="pose-empty">No data pre-loaded.</div>';
+      return;
+    }
+
+    state.filename = data.filename;
+    setMatches(data.matches || null);
+
+    $('#filename').textContent = data.filename;
+    $('#viewer-hint').style.display = 'none';
+    status(`Loaded: ${data.filename}`);
+
+    showOverlay('Loading 3-D model…');
+    const stepRes = await fetch('/api/step-file');
+    if (stepRes.ok) {
+      const buf = await stepRes.arrayBuffer();
+      buildMeshesFromStep(buf);
+    } else {
+      hideOverlay();
+      status('Failed to fetch STEP file');
+    }
+  } catch (err) {
+    hideOverlay();
+    status('Failed to load session: ' + err.message);
+  }
+})();
+</script>
+</body>
+</html>
